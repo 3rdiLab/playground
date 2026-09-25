@@ -20,7 +20,7 @@
     emperor: { label: 'Emperor', react: 6,  block: 0.72, aggro: 0.85 },
   };
 
-  SL.settings = { hq: true };
+  SL.settings = { hq: true, r3d: true };
   const game = (SL.game = {
     phase: 'idle', paused: false, frame: 0, phaseT: 0,
     fighters: [], projectiles: [], hazards: [], particles: [], texts: [], bubbles: [],
@@ -539,7 +539,7 @@
 
     if (game.phase === 'fight') {
       collectPlayerInput(p);
-      aiUpdate(c, p);
+      if (game.opts.remote) game.opts.remote(c.input); else aiUpdate(c, p);
       if (--game.timer <= 0) timeUp();
     } else { p.input = blankInput(); c.input = blankInput(); }
 
@@ -629,9 +629,25 @@
     ctx.drawImage(vignette, 0, 0);
   }
 
+  let canvas3d = null;
+  const use3d = () => SL.settings.r3d && canvas3d && SL.render3d && SL.render3d.ok;
   function render() {
     R.ctx = ctx;
     const T = game.frame, cam = game.cam;
+    if (canvas3d) canvas3d.style.visibility = use3d() ? 'visible' : 'hidden';
+    if (use3d()) {
+      const r = canvas.getBoundingClientRect();
+      SL.render3d.render(game, Math.max(1, Math.round(r.width)), Math.max(1, Math.round(r.height)));
+      const pj = SL.render3d.project;
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      R.drawTexts(game.texts, pj);
+      R.drawHUD(game, T);
+      if (game.cine) R.drawCine(game, T, () => {}, pj);
+      R.drawBubbles(game.bubbles, cam, pj);
+      if (game.banner) R.drawBanner(game.banner);
+      return;
+    }
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.save();
     if (game.shake > 0) ctx.translate((Math.random() - 0.5) * game.shake, (Math.random() - 0.5) * game.shake);
@@ -664,15 +680,98 @@
     requestAnimationFrame(loop);
     const dt = Math.min(100, now - last); last = now;
     if (game.phase === 'idle' || !canvas) return;
+    if (game.view) {
+      acc += dt; let n = 0;
+      while (acc >= DT && n < 5) { viewStep(); acc -= DT; n++; }
+      if (n === 5) acc = 0;
+      if (padHooks) padHooks(game.fighters[game.opts.me || 0]);
+      render();
+      return;
+    }
     if (!game.paused) {
       acc += dt; let n = 0;
-      while (acc >= DT && n < 5) { step(); acc -= DT; n++; }
+      while (acc >= DT && n < 5) { step(); if (game.opts && game.opts.onFrame) game.opts.onFrame(); acc -= DT; n++; }
       if (n === 5) acc = 0;
       if (padHooks) padHooks(game.fighters[0]);
     }
     render();
   }
   requestAnimationFrame(loop);
+
+  // ---------- online play: snapshots (host) and a render-only view (guest) ----------
+  const r1 = v => Math.round(v * 10) / 10;
+  function snapshot() {
+    const idx = f => game.fighters.indexOf(f);
+    return {
+      f: game.frame, ph: game.phase, pt: game.phaseT, w: game.wins, rd: game.round, tm: game.timer, sh: r1(game.shake),
+      fs: game.fighters.map(f => [r1(f.x), r1(f.y), f.facing, f.state, f.t, r1(f.hp), r1(f.hpShow), r1(f.energy), f.awakened ? 1 : 0, f.combo, f.comboT, f.step, f.air ? 1 : 0, Math.round(f.armLen), f.flash, f.invuln, r1(f.vx), Math.round(f.anim)]),
+      pr: game.projectiles.slice(0, 8).map(p => [r1(p.x), r1(p.y), r1(p.vx), p.r, p.kind, p.color, p.t, p.big ? 1 : 0, p.pull ? 1 : 0, idx(p.owner)]),
+      hz: game.hazards.slice(0, 6).map(h => [h.kind, r1(h.x || 0), h.t, h.warn, h.act, h.w || 0, h.color, idx(h.owner), idx(h.target), h.dir || 0]),
+      cn: game.cine ? [game.cine.type, idx(game.cine.f), game.cine.t, game.cine.dur] : 0,
+      bn: game.banner ? [game.banner.text, game.banner.color, game.banner.dur, game.banner.sub, game.banner.t] : 0,
+      tx: game.texts.slice(-5).map(t => [Math.round(t.x), Math.round(t.y), String(t.text).slice(0, 24), t.color, t.size, t.life]),
+    };
+  }
+  let lastSnap = null;
+  function applySnapshot(s) {
+    if (!s || !Array.isArray(s.fs) || s.fs.length !== 2) return;
+    if (lastSnap && s.f <= lastSnap.f) return;
+    const prev = lastSnap; lastSnap = s;
+    const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+    const str = (v, d = '') => (typeof v === 'string' ? v.slice(0, 40) : d);
+    game.phase = ['intro', 'fight', 'roundEnd', 'matchEnd'].includes(s.ph) ? s.ph : game.phase;
+    game.phaseT = num(s.pt); game.round = num(s.rd, 1); game.timer = num(s.tm);
+    game.wins = Array.isArray(s.w) ? [num(s.w[0]), num(s.w[1])] : game.wins;
+    game.shake = Math.max(game.shake, num(s.sh));
+    s.fs.forEach((a, i) => {
+      const f = game.fighters[i]; if (!Array.isArray(a)) return;
+      const hpBefore = f.hp, wasAwake = f.awakened;
+      f.tx = num(a[0], f.x); f.ty = num(a[1], f.y);
+      if (!prev || Math.abs(f.tx - f.x) > 200) { f.x = f.tx; f.y = f.ty; }
+      f.facing = a[2] === -1 ? -1 : 1; f.state = str(a[3], 'idle'); f.t = num(a[4]);
+      f.hp = num(a[5], f.hp); f.hpShow = num(a[6], f.hp); f.energy = num(a[7]); f.awakened = !!a[8];
+      f.combo = num(a[9]); f.comboT = num(a[10]); f.step = num(a[11]); f.air = !!a[12]; f.armLen = num(a[13]);
+      f.flash = num(a[14]); f.invuln = num(a[15]); f.vx = num(a[16]); f.anim = num(a[17]);
+      f.move = f.air ? AIR : COMBO[Math.max(0, Math.min(2, f.step))];
+      if (prev && f.hp < hpBefore - 0.5) {
+        const heavy = hpBefore - f.hp >= 12;
+        emit(f.x, f.y - 70, heavy ? 22 : 12, { spread: heavy ? 12 : 8, life: 18, r: 3, color: '#fff2b8', kind: 'spark' });
+        sfx(heavy ? 'heavy' : 'hit');
+      }
+      if (prev && f.awakened && !wasAwake) { emit(f.x, f.y - 60, 50, { spread: 12, life: 40, r: 5, color: f.def.colors.awaken }); sfx('awaken'); emitEvent('awaken', f); }
+    });
+    const F = i => game.fighters[i] || game.fighters[0];
+    game.projectiles = (Array.isArray(s.pr) ? s.pr : []).map(a => ({ x: num(a[0]), y: num(a[1]), vx: num(a[2], 1), r: Math.min(120, num(a[3], 10)), kind: str(a[4], 'orb'), color: str(a[5], '#ffffff'), t: num(a[6]), big: !!a[7], pull: !!a[8], owner: F(num(a[9])) }));
+    game.hazards = (Array.isArray(s.hz) ? s.hz : []).map(a => ({ kind: str(a[0], 'pillar'), x: num(a[1]), t: num(a[2]), warn: num(a[3], 1), act: num(a[4], 1), w: num(a[5]), color: str(a[6], '#ffffff'), owner: F(num(a[7])), target: F(num(a[8])), dir: num(a[9]) }));
+    game.cine = Array.isArray(s.cn) ? { type: str(s.cn[0], 'ult'), f: F(num(s.cn[1])), t: num(s.cn[2]), dur: num(s.cn[3], 80) } : null;
+    const bn = Array.isArray(s.bn) ? s.bn : null;
+    if (bn && (!game.banner || game.banner.text !== bn[0])) { game.banner = { text: str(bn[0]), color: str(bn[1], '#ffc23d'), dur: num(bn[2], 50), sub: str(bn[3]), t: num(bn[4]) }; if (bn[0] === 'K.O.!') sfx('ko'); }
+    else if (!bn) game.banner = null;
+    game.texts = (Array.isArray(s.tx) ? s.tx : []).map(a => ({ x: num(a[0]), y: num(a[1]), text: str(a[2]), color: str(a[3], '#ffffff'), size: Math.min(40, num(a[4], 24)), life: num(a[5], 20), max: 50 }));
+  }
+  function viewStep() {
+    game.frame++;
+    updateParticles();
+    ambient();
+    if (game.shake > 0) { game.shake *= 0.88; if (game.shake < 0.3) game.shake = 0; }
+    for (const f of game.fighters) {
+      if (f.tx != null) { f.x += (f.tx - f.x) * 0.45; f.y += (f.ty - f.y) * 0.45; }
+      if (f.flash > 0) f.flash--;
+      if ((f.awakened) && game.frame % 5 === 0 && f.state !== 'ko') emit(f.x, f.y - 30, 1, { jitter: 36, jitterY: 60, vy: -2, life: 26, r: 3, color: f.def.colors.awaken, drag: 0.98 });
+    }
+    if (game.phase === 'fight' && game.frame % 8 === 0) { const s = audio.DRUM[game.drumStep++ % 16]; if (s === 1) sfx('drum'); else if (s === 2) sfx('rim'); }
+    updateCamera(false);
+    if (game.opts.onFrame) game.opts.onFrame();
+  }
+  /** Read and consume this device's controls (used by the online guest). */
+  function readInput() {
+    const i = {};
+    for (const k of ['left', 'right', 'block', 'charge']) i[k] = !!(keys[k] || touch[k]);
+    i.jump = presses.jump || !!keys.jump || touch.jump;
+    i.attack = presses.attack; i.special = presses.special; i.ult = presses.ult; i.dash = presses.dash;
+    clearPresses();
+    return i;
+  }
 
   const engine = (SL.engine = {
     DIFF,
@@ -695,20 +794,34 @@
       game.fighters = [makeFighter(opts.p1, WORLD / 2 - 220, 1, false), makeFighter(opts.p2, WORLD / 2 + 220, -1, true, { hpMult: opts.hpMult, corrupted: opts.corrupted })];
       game.wins = [0, 0]; game.round = 1; game.particles = []; game.texts = [];
       game.stats = { maxCombo: 0, ults: 0, awakened: false };
-      game.paused = false;
+      game.paused = false; game.view = false;
       resetRound();
       resize();
       last = performance.now(); acc = 0;
     },
-    stop() { game.phase = 'idle'; game.paused = false; },
+    stop() { game.phase = 'idle'; game.paused = false; game.view = false; if (SL.render3d && SL.render3d.ok) SL.render3d.clear(); },
     togglePause(force) {
-      if (game.phase === 'idle' || game.phase === 'matchEnd') return;
+      if (game.phase === 'idle' || game.phase === 'matchEnd' || (game.opts && game.opts.online)) return;
       game.paused = typeof force === 'boolean' ? force : !game.paused;
       if (!game.paused) { last = performance.now(); acc = 0; }
       for (const k in keys) keys[k] = false;
       emitEvent('pause', game.paused);
     },
     say,
+    snapshot, applySnapshot, readInput, blankInput,
+    attach3d(cv) { canvas3d = cv; },
+    /** Guest: render-only view driven by host snapshots. opts: { p1, p2, stage, stageName, labels, me, onFrame } */
+    view(opts) {
+      audio.init();
+      game.opts = opts; game.view = true; lastSnap = null;
+      game.stage = opts.stage; game.stageName = opts.stageName || ''; game.labels = opts.labels;
+      game.fighters = [makeFighter(opts.p1, WORLD / 2 - 220, 1, false), makeFighter(opts.p2, WORLD / 2 + 220, -1, false)];
+      game.wins = [0, 0]; game.round = 1; game.particles = []; game.texts = []; game.projectiles = []; game.hazards = []; game.bubbles = [];
+      game.cine = null; game.banner = null; game.paused = false; game.phase = 'intro'; game.timer = 3600;
+      game.stats = { maxCombo: 0, ults: 0, awakened: false };
+      updateCamera(true); resize();
+      last = performance.now(); acc = 0;
+    },
     lines(def) { return LINES[def.id] || LINES.custom; },
   });
 

@@ -56,7 +56,7 @@
   // ---------- views ----------
   function showView(name) {
     ui.view = name;
-    for (const v of ['versus', 'story', 'create', 'awards', 'ranks', 'arena']) $('view-' + v).hidden = v !== name;
+    for (const v of ['versus', 'online', 'story', 'create', 'awards', 'ranks', 'arena']) $('view-' + v).hidden = v !== name;
     document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === name)));
     $('app').classList.toggle('in-arena', name === 'arena');
     if (name === 'versus') renderVersus();
@@ -64,7 +64,8 @@
     if (name === 'create') renderCreator();
     if (name === 'ranks') renderRanks();
     if (name === 'awards') renderAwards();
-    if (name !== 'arena') { E.stop(); crLoop(name === 'create'); }
+    if (name === 'online') renderOnline();
+    if (name !== 'arena') { E.stop(); crLoop(name === 'create'); $('btnPause').disabled = false; $('btnPause').title = ''; }
   }
   document.querySelectorAll('.tabs [role=tab]').forEach(b => b.addEventListener('click', () => {
     if (ui.view === 'arena' && !confirmLeave()) return;
@@ -150,11 +151,27 @@
   function refreshToggles() {
     $('btnSound').textContent = A.muted ? 'Sound: Off' : 'Sound: On';
     $('btnGfx').textContent = SL.settings.hq ? 'Graphics: High' : 'Graphics: Low';
+    const has3d = !!(SL.render3d && SL.render3d.ok);
+    $('btnView').textContent = has3d ? (SL.settings.r3d ? 'View: 3D' : 'View: 2D') : 'View: 2D';
+    $('btnView').title = has3d ? 'Switch between the 3D and 2D renderers' : '3D is loading or not supported in this browser';
     const live = O.banterMode === 'live';
     $('btnBanter').textContent = live ? 'Rival AI: Live' : 'Rival AI: Classic';
     $('btnBanter').title = live ? 'Rivals write fresh trash talk with Claude (uses your Claude usage). Click for classic lines.' : 'Rivals use built-in lines. Click to let Claude write live trash talk.';
   }
   SL.settings.hq = O.local.get('hq', true);
+  SL.settings.r3d = O.local.get('r3d', true);
+  $('btnView').addEventListener('click', () => {
+    if (!(SL.render3d && SL.render3d.ok)) { toast('3D needs WebGL, which is not available in this browser. Using 2D.'); return; }
+    SL.settings.r3d = !SL.settings.r3d; O.local.set('r3d', SL.settings.r3d); refreshToggles();
+  });
+  const boot3d = () => {
+    if (!SL.render3d || SL.render3d.ok) return;
+    const cv = $('game3d');
+    if (SL.render3d.init(cv)) E.attach3d(cv);
+    refreshToggles();
+  };
+  window.addEventListener('sl-3d-ready', boot3d);
+  if (SL.render3d) boot3d();
   $('btnGfx').addEventListener('click', () => { SL.settings.hq = !SL.settings.hq; O.local.set('hq', SL.settings.hq); refreshToggles(); });
   $('btnSound').addEventListener('click', () => { A.muted = !A.muted; O.local.set('muted', A.muted); A.init(); refreshToggles(); });
   $('btnBanter').addEventListener('click', () => { O.setBanter(O.banterMode === 'live' ? 'classic' : 'live'); refreshToggles(); toast(O.banterMode === 'live' ? 'Rivals will write live trash talk when available.' : 'Rivals will use classic lines.'); });
@@ -252,6 +269,7 @@
   }
   function renderVersus() {
     renderAiLevel();
+    if (SL.net) SL.net.setMyFighter(() => findDef(ui.p1) || ROSTER[0]);
     if (!findDef(ui.p1)) ui.p1 = 'kaito';
     if (ui.p2 !== 'random' && !findDef(ui.p2)) ui.p2 = 'random';
     renderSlots(); renderFilters(); renderGrid(); renderDetail(); renderDiff();
@@ -425,6 +443,7 @@
     } else overlay.hidden = true;
   });
   function quitFight() {
+    if (SL.net.match) { SL.net.leave(); fight = null; E.stop(); overlay.hidden = true; showView('online'); return; }
     const back = fight && fight.mode === 'story' ? 'story' : 'versus';
     fight = null; E.stop(); overlay.hidden = true; $('btnPause').textContent = 'Pause';
     showView(back);
@@ -432,6 +451,91 @@
   $('btnPause').addEventListener('click', () => E.togglePause());
   $('btnQuit').addEventListener('click', quitFight);
   document.addEventListener('visibilitychange', () => { if (document.hidden && ui.view === 'arena' && (SL.game.phase === 'fight' || SL.game.phase === 'intro') && !SL.game.paused) E.togglePause(true); });
+
+  // ================= ONLINE =================
+  const NET = SL.net;
+  NET.setMyFighter(() => findDef(ui.p1) || ROSTER[0]);
+  const nameCache = {};
+  async function nameOf(by) {
+    if (!by) return 'A player';
+    if (nameCache[by]) return nameCache[by];
+    const ps = await O.profiles([by]);
+    return (nameCache[by] = (ps[by] && ps[by].name) || 'A player');
+  }
+  async function renderOnline() {
+    const me = findDef(ui.p1) || ROSTER[0];
+    const box = $('onMe'); box.innerHTML = '';
+    const c = el('canvas', { 'aria-hidden': 'true' });
+    box.append(c, el('div', {}, el('b', { text: me.name }), energyPill(me)));
+    paint(c, me, { size: 144 });
+    const status = $('onStatus'), list = $('onList');
+    list.innerHTML = '';
+    if (NET.status !== 'online') {
+      status.textContent = NET.status === 'connecting' ? 'Connecting…' : 'Online play works when this game is opened on claude.ai by people in your organization.';
+      list.append(el('p', { class: 'empty', text: 'Nobody to show yet.' }));
+      return;
+    }
+    status.textContent = NET.pendingOut ? 'Challenge sent. Waiting for an answer…' : NET.connected === false ? 'Reconnecting…' : 'You are visible to other players.';
+    const peers = NET.peers();
+    if (!peers.length) { list.append(el('p', { class: 'empty', text: 'Nobody else has the game open right now. Share the link with a friend and challenge them here.' })); return; }
+    for (const p of peers) {
+      const lb = p.presence.lobby, busy = lb.st !== 'open';
+      const row = el('div', { class: 'on-row' });
+      const img = el('img', { alt: '', hidden: '' });
+      const nm = el('span', { class: 'nm', text: p.isMe ? 'You (another tab)' : '…' });
+      const act = p.isMe ? el('span', { class: 'note', text: 'Your other tab' }) :
+        NET.pendingOut && NET.pendingOut.to === p.peer ? el('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: () => { NET.cancelChallenge(); renderOnline(); } }) :
+        el('button', { class: 'btn primary', type: 'button', text: busy ? 'In a match' : 'Challenge', disabled: busy || NET.pendingOut || NET.match ? '' : null, onclick: () => { A.init(); if (NET.challenge(p.peer)) { A.play('confirm'); renderOnline(); } } });
+      row.append(img, el('div', {}, nm, el('div', { class: 'sub' }, el('span', { class: 'dot' + (busy ? ' busy' : '') }), document.createTextNode(`${String(lb.f || 'Unknown fighter').slice(0, 30)} · ${busy ? 'busy' : 'ready'}`))), act);
+      list.append(row);
+      if (!p.isMe) nameOf(p.by).then(n => { nm.textContent = n; });
+      if (p.by && O.user) O.profiles([p.by]).then(ps => { if (ps[p.by] && ps[p.by].avatarUrl) { img.src = ps[p.by].avatarUrl; img.hidden = false; } });
+    }
+  }
+  $('onChange').addEventListener('click', () => { ui.slot = 'p1'; showView('versus'); });
+  let onlineRenderQueued = false;
+  NET.onChange = () => { if (ui.view === 'online' && !onlineRenderQueued) { onlineRenderQueued = true; requestAnimationFrame(() => { onlineRenderQueued = false; renderOnline(); }); } };
+  NET.onNotice = msg => { toast(msg); NET.onChange(); };
+  NET.onInvite = async inv => {
+    const box = $('invite');
+    if (!inv) { box.hidden = true; return; }
+    const name = await nameOf(inv.by);
+    if (NET.pendingIn !== inv) return;
+    box.innerHTML = '';
+    box.append(el('p', { class: 'eyebrow', text: 'Incoming challenge' }), el('h2', { class: 'title', text: `${name} wants to fight` }),
+      el('p', { class: 'note', text: `They are playing ${inv.def.name}. You will fight as ${(findDef(ui.p1) || ROSTER[0]).name}.` }),
+      el('div', { class: 'ov-actions', style: 'justify-content:flex-start' },
+        el('button', { class: 'btn primary', type: 'button', text: 'Accept', onclick: () => { A.init(); box.hidden = true; NET.accept(); } }),
+        el('button', { class: 'btn', type: 'button', text: 'Decline', onclick: () => { box.hidden = true; NET.decline(); } })));
+    box.hidden = false; A.init(); A.play('achieve');
+  };
+  NET.onStart = m => {
+    $('invite').hidden = true;
+    fight = { mode: 'online', token: Math.random() };
+    overlay.hidden = true;
+    showView('arena');
+    $('btnPause').disabled = true; $('btnPause').title = 'Online matches cannot be paused';
+    $('arenaStage').textContent = 'Online match';
+    nameOf(m.oppBy).then(n => { $('arenaStage').textContent = `Online vs ${n}`; });
+  };
+  NET.onEnd = async r => {
+    if (ui.view !== 'arena') return;
+    if (r.aborted) { toast(r.reason); fight = null; E.stop(); overlay.hidden = true; showView('online'); return; }
+    const s = O.save.stats;
+    if (r.won) { s.wins++; s.streak++; s.best = Math.max(s.best, s.streak); SL.ach.bump('onlineWins'); }
+    else if (!r.draw) { s.losses++; s.streak = 0; }
+    O.persist(); SL.ach.flush(); O.submitScore();
+    const name = await nameOf(r.oppBy);
+    overlay.innerHTML = '';
+    overlay.append(el('div', { class: 'ov-card' },
+      el('p', { class: 'eyebrow', text: `Online match · ${r.wins[0]}–${r.wins[1]}` }),
+      el('h2', { class: 'ov-title ' + (r.won ? 'win' : 'lose'), text: r.draw ? 'Draw' : r.won ? 'Victory' : 'Defeat' }),
+      el('p', { class: 'ov-sub', text: `${r.won ? 'You beat' : r.draw ? 'You tied with' : 'You lost to'} ${name} (${r.rival.name}).` }),
+      el('div', { class: 'ov-actions' },
+        el('button', { class: 'btn primary', type: 'button', text: 'Rematch', onclick: () => { overlay.hidden = true; E.stop(); showView('online'); if (NET.challenge(r.opp)) toast('Rematch challenge sent.'); } }),
+        el('button', { class: 'btn', type: 'button', text: 'Back to lobby', onclick: () => { overlay.hidden = true; E.stop(); showView('online'); } }))));
+    overlay.onclick = null; overlay.hidden = false;
+  };
 
   // ================= STORY =================
   function heroDef() { return findDef(O.save.story.hero) || ROSTER[0]; }

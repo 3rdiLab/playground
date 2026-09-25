@@ -16,6 +16,10 @@ It runs from a link, with touch buttons on phones.
 - **Story mode:** seven chapters across the worlds, ending against Null, the Void Emperor. Beating him unlocks Null.
 - **Fighter creator:** design a fighter's look, colors, moves, awakening and stats, then share it to the community gallery.
 - **Leaderboard:** shared wins, best streak and story progress for everyone who opens the game on claude.ai.
+- **3D mode:** a Three.js renderer with cel-shaded 3D fighters built from the same designs, real lighting,
+  shadows, bloom and 3D effects. The "View" button switches between 3D and 2D.
+- **Online versus:** everyone with the game open shows up in the Online tab. Challenge someone and fight live;
+  the challenger's browser runs the match and streams it to the opponent.
 - **Achievements:** 39 awards across combat, technique, story and creator goals, with pop-ups and an Awards tab.
   Award points show on the leaderboard.
 - **Progression:** your custom fighters earn 1 skill point per 5 wins to upgrade Health, Speed or Power.
@@ -26,7 +30,7 @@ It runs from a link, with touch buttons on phones.
 Source: [`arena/`](arena/). `index.html` holds the layout and styles. The scripts in `arena/js/` load in this order:
 `data.js` (roster, story, lines), `audio.js`, `render.js` (stages, jointed fighter rigs, effects), `engine.js`
 (combat, AI, camera, input, bloom), `online.js` (saves, progression, leaderboard, gallery, banter),
-`achievements.js` and `ui.js` (screens).
+`achievements.js`, `net.js` (online versus), `render3d.js` (Three.js 3D view) and `ui.js` (screens).
 
 ## Terminal version
 

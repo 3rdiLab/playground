@@ -745,6 +745,17 @@
     g.restore();
   }
   R.drawFighter = drawFighter;
+  // Shared with the 3D renderer so both views animate identically.
+  R.pose = pose; R.ik = ik; R.fk = fk; R.HAIR = HAIR; R.STAGE_RIM = STAGE_RIM;
+  /** Paint a fighter's face (skin + features) onto a square canvas, head center in the middle, `px` pixels per unit. */
+  R.paintFace = (canvas, f, P, T, px) => {
+    const c = canvas.getContext('2d'), n = canvas.width;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.fillStyle = f.def.colors.skin; c.fillRect(0, 0, n, n);
+    c.setTransform(px, 0, 0, px, n / 2, n / 2);
+    const prev = g; g = c;
+    try { faceDetails(f, f.def, 0, 0, P, T, false); } finally { g = prev; }
+  };
 
   // Afterimages for dashes and teleports.
   R.drawGhosts = (f, T) => {
@@ -879,8 +890,11 @@
     g.restore();
   };
 
-  R.drawTexts = list => {
-    for (const t of list) { g.save(); g.globalAlpha = Math.min(1, t.life / 15); outlineText(t.text, t.x, t.y, t.size, t.color); g.restore(); }
+  R.drawTexts = (list, project) => {
+    for (const t of list) {
+      const [x, y] = project ? project(t.x, t.y) : [t.x, t.y];
+      g.save(); g.globalAlpha = Math.min(1, t.life / 15); outlineText(t.text, x, y, t.size, t.color); g.restore();
+    }
   };
 
   function wrap(text, maxW) {
@@ -889,10 +903,10 @@
     if (line) lines.push(line);
     return lines.slice(0, 4);
   }
-  R.drawBubbles = (list, cam) => {
+  R.drawBubbles = (list, cam, project) => {
     for (const b of list) {
       const f = b.f, a = Math.min(1, b.life / 12, (b.max - b.life) / 6 + 0.2);
-      const sx = (f.x - cam.x) * cam.z + W / 2, sy = (f.y - 150 - GROUND) * cam.z + GROUND;
+      const [sx, sy] = project ? project(f.x, f.y - 150) : [(f.x - cam.x) * cam.z + W / 2, (f.y - 150 - GROUND) * cam.z + GROUND];
       g.save(); g.globalAlpha = a;
       g.font = '600 15px "Chakra Petch", sans-serif';
       const lines = wrap(b.text, 230);
@@ -972,13 +986,14 @@
     outlineText(String(Math.max(0, Math.ceil(game.timer / 60))), cx, 42, 34, game.timer < 600 ? '#ff5b2e' : '#f3efe7');
   };
 
-  R.drawCine = (game, T, drawOnTop) => {
+  R.drawCine = (game, T, drawOnTop, project) => {
     const cn = game.cine, f = cn.f, d = f.def;
     const e = Math.min(1, cn.t / 10), out = cn.t > cn.dur - 10 ? (cn.dur - cn.t) / 10 : 1, k = e * out;
     const col = cn.type === 'awaken' ? d.colors.awaken : (f.awakened ? d.colors.awaken : (d.ult.color || d.colors.aura));
     g.save();
-    g.fillStyle = `rgba(5,6,14,${0.66 * k})`; g.fillRect(-40, -40, W + 80, H + 80);
-    const cam = game.cam, cx = (f.x - cam.x) * cam.z + W / 2, cy = (f.y - 60 - GROUND) * cam.z + GROUND;
+    g.fillStyle = `rgba(5,6,14,${(project ? 0.3 : 0.66) * k})`; g.fillRect(-40, -40, W + 80, H + 80);
+    const cam = game.cam;
+    const [cx, cy] = project ? project(f.x, f.y - 60) : [(f.x - cam.x) * cam.z + W / 2, (f.y - 60 - GROUND) * cam.z + GROUND];
     g.strokeStyle = hexA(col, 0.55 * k); g.lineWidth = 2;
     for (let i = 0; i < 52; i++) {
       const a = rnd(i * 3.7 + Math.floor(cn.t / 3)) * TAU, r1 = 130 + rnd(i * 1.3 + Math.floor(cn.t / 3)) * 70;

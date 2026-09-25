@@ -52,6 +52,8 @@
     { id: 'maxed',      cat: 'Creator',   icon: 'star',   tier: 'gold',     name: 'Fully Trained',        desc: 'Max out any stat on a custom fighter (+10).',    key: 'maxedStat', goal: 1 },
     { id: 'ai10',       cat: 'Combat',    icon: 'bolt',   tier: 'silver',   name: 'Arms Race',            desc: 'Push the rival AI to level 10.',                 key: 'aiLevel', goal: 10 },
     { id: 'ai25',       cat: 'Combat',    icon: 'crown',  tier: 'gold',     name: 'Frankenstein',         desc: 'Push the rival AI to level 25.',                 key: 'aiLevel', goal: 25 },
+    { id: 'online1',    cat: 'Combat',    icon: 'globe',  tier: 'silver',   name: 'Face to Face',         desc: 'Win an online match against another player.',   key: 'onlineWins', goal: 1 },
+    { id: 'online10',   cat: 'Combat',    icon: 'globe',  tier: 'gold',     name: 'Ranked Contender',     desc: 'Win 10 online matches.',                         key: 'onlineWins', goal: 10 },
     { id: 'banter',     cat: 'Creator',   icon: 'chat',   tier: 'bronze',   name: 'Trash Talk Survivor',  desc: 'Hear a live AI-written rival line.',             key: 'banterHeard', goal: 1 },
 
     { id: 'complete',   cat: 'Legend',    icon: 'crown',  tier: 'platinum', name: 'Legend of Six Worlds', desc: 'Unlock every other achievement.',                key: '__all', goal: 0 },
