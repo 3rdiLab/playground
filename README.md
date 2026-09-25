@@ -4,7 +4,16 @@ A turn-based terminal battle game inspired by Naruto, Bleach and One Piece.
 Chakra, reiatsu and haki fighters go head to head. When a fighter drops to
 30% HP, they awaken into their ultimate form, the way shonen heroes always do.
 
-## Quick start
+## Play in your browser
+
+**[Shonen Legends: Arena](https://claude.ai/artifact/Ke7w1epWLTStsVwGdugcFf)** is a real-time 2D fighter
+built on the same rules. It runs from a link with touch buttons on phones. The source is
+[`arena/index.html`](arena/index.html).
+
+## Terminal version
+
+This Python version is a turn-based game you run in a terminal. It can't be played from the
+GitHub page itself.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
