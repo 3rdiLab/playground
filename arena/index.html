@@ -249,6 +249,46 @@
   .pad-left .right { grid-column: 3; grid-row: 2; }
   @keyframes pulse { from { box-shadow: 0 0 0 0 rgba(255,194,61,0); } to { box-shadow: 0 0 14px 2px rgba(255,194,61,.55); } }
 
+  /* ---------- awards ---------- */
+  .aw-summary { display: grid; grid-template-columns: auto auto 1fr; gap: 12px 28px; align-items: center; }
+  .aw-big b { display: block; font-family: var(--display); font-size: 34px; letter-spacing: 1px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .aw-big span { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
+  .aw-bar { height: 10px; background: var(--bg); border-radius: 6px; overflow: hidden; }
+  .aw-bar i, .aw-prog i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--heat)); border-radius: 6px; }
+  .aw-cat { margin: 6px 0 0; font-family: var(--display); font-weight: 400; font-size: 22px; letter-spacing: 1px; color: var(--gold); }
+  .aw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .aw { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .aw.done { border-color: rgba(255,194,61,.45); background: linear-gradient(135deg, rgba(255,194,61,.08), var(--panel) 60%); }
+  .aw-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .aw-name { margin: 0; font-family: var(--display); font-size: 19px; letter-spacing: .6px; line-height: 1.05; }
+  .aw-desc { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .aw-meta { margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .aw-prog { display: block; height: 5px; background: var(--bg); border-radius: 4px; overflow: hidden; margin-top: 2px; }
+  .badge { width: 52px; height: 58px; display: grid; place-items: center; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: linear-gradient(160deg, var(--ta), var(--tb)); }
+  .badge svg { width: 26px; height: 26px; fill: none; stroke: #140c04; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .badge.off { background: linear-gradient(160deg, #3a4064, #1c2140); }
+  .badge.off svg { stroke: #6d76a3; }
+  .ach-toast { position: fixed; top: 14px; right: 14px; z-index: 20; display: flex; gap: 12px; align-items: center; background: rgba(21,26,49,.97); border: 1px solid var(--gold); border-radius: 14px; padding: 10px 16px 10px 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5), 0 0 24px rgba(255,194,61,.2); transform: translateX(120%); transition: transform .35s cubic-bezier(.2,.9,.3,1.2); max-width: calc(100% - 28px); }
+  .ach-toast.show { transform: translateX(0); }
+  .ach-toast .eyebrow { color: var(--gold); }
+  .at-name { margin: 0; font-family: var(--display); font-size: 22px; letter-spacing: .8px; line-height: 1.05; }
+  .ov-note { margin: 0; font-size: 13px; color: var(--ink); max-width: 52ch; }
+  .ov-note.ach { color: var(--gold); font-weight: 600; }
+  .ai-level { margin-top: -4px; }
+
+  /* ---------- upgrades ---------- */
+  .upg { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+  .upg-head { margin: 0; display: flex; justify-content: space-between; gap: 6px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+  .upg-pts.on { color: var(--gold); font-weight: 700; }
+  .upg-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .upg-btn { display: flex; flex-direction: column; align-items: center; gap: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 3px 2px; font-size: 11px; line-height: 1.2; }
+  .upg-btn b { font-weight: 600; color: var(--muted); }
+  .upg-btn span { font-family: var(--display); font-size: 16px; letter-spacing: .5px; }
+  .upg-btn:not(:disabled) { border-color: var(--gold); }
+  .upg-btn:not(:disabled):hover { background: rgba(255,194,61,.12); }
+  .upg-btn:disabled { opacity: .6; cursor: default; }
+  .saved { align-items: start; }
+
   .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--gold); border-radius: 10px; padding: 8px 14px; font-size: 14px; z-index: 10; max-width: calc(100% - 32px); }
 
   @media (max-width: 860px) {
@@ -257,6 +297,8 @@
     .cr-preview canvas { max-width: 260px; align-self: center; }
   }
   @media (max-width: 560px) {
+    .aw-summary { grid-template-columns: 1fr 1fr; }
+    .aw-bar { grid-column: 1 / -1; }
     .slots { grid-template-columns: 1fr 1fr; }
     .vs-mark { display: none; }
     .slot, .slot.rival { grid-template-columns: 1fr; text-align: center; padding: 6px; clip-path: none; }
@@ -286,7 +328,7 @@
     .pad-right { grid-template-columns: repeat(3, 58px); grid-template-rows: 46px 56px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .fcard, .pbtn.ult.ready, .vs-splash .side, .vs-splash .vs { transition: none; animation: none; }
+    .fcard, .pbtn.ult.ready, .vs-splash .side, .vs-splash .vs, .ach-toast { transition: none; animation: none; }
   }
 </style>
 
@@ -297,10 +339,12 @@
       <button role="tab" id="tab-versus" data-view="versus" aria-selected="true" type="button">Versus</button>
       <button role="tab" id="tab-story" data-view="story" aria-selected="false" type="button">Story</button>
       <button role="tab" id="tab-create" data-view="create" aria-selected="false" type="button">Create</button>
+      <button role="tab" id="tab-awards" data-view="awards" aria-selected="false" type="button">Awards</button>
       <button role="tab" id="tab-ranks" data-view="ranks" aria-selected="false" type="button">Ranks</button>
     </nav>
     <div class="top-actions">
       <button class="btn" id="btnBanter" type="button">Rival AI: Live</button>
+      <button class="btn" id="btnGfx" type="button">Graphics: High</button>
       <button class="btn" id="btnSound" type="button">Sound: On</button>
     </div>
   </header>
@@ -339,6 +383,7 @@
       </div>
       <button class="fight-btn" id="btnFight" type="button">Fight!</button>
     </div>
+    <p class="note ai-level" id="aiLevel"></p>
     <details class="help" id="help">
       <summary>How to play</summary>
       <div class="help-grid">
@@ -369,6 +414,8 @@
             <li>At 30% health you awaken once: faster, 30% stronger, half your energy refills.</li>
             <li>Big ultimates beat small projectiles when they collide.</li>
             <li>On a phone, buttons appear under the arena. Double-tap an arrow to dash.</li>
+            <li>Every 5 wins with one of your own fighters earns a skill point to upgrade them in Create.</li>
+            <li>Every time the rival AI loses, it gains a level and a point in a random stat. It gets tougher the more you win.</li>
           </ul>
         </div>
       </div>
@@ -474,6 +521,20 @@
     </div>
   </section>
 
+  <!-- ================= AWARDS ================= -->
+  <section class="view stack" id="view-awards" hidden>
+    <div class="story-head">
+      <div>
+        <p class="eyebrow">Achievements</p>
+        <h2 class="title">Awards</h2>
+        <p>Unlock awards by fighting, clearing story chapters and building fighters. Points count toward your spot on the leaderboard.</p>
+      </div>
+      <div class="seg" id="awardsFilter" role="group" aria-label="Filter achievements"></div>
+    </div>
+    <div class="aw-summary panel" id="awardsSummary"></div>
+    <div class="stack" id="awardsList"></div>
+  </section>
+
   <!-- ================= RANKS ================= -->
   <section class="view stack" id="view-ranks" hidden>
     <div>
@@ -485,7 +546,7 @@
         <p class="note" id="boardStatus"></p>
         <div class="table-wrap">
           <table class="board">
-            <thead><tr><th>#</th><th>Player</th><th class="num">Wins</th><th class="num">Best streak</th><th class="num">Story</th><th>Main</th></tr></thead>
+            <thead><tr><th>#</th><th>Player</th><th class="num">Wins</th><th class="num">Best streak</th><th class="num">Story</th><th>Main</th><th class="num">Award pts</th></tr></thead>
             <tbody id="boardBody"></tbody>
           </table>
         </div>
@@ -536,10 +597,12 @@
   </section>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="ach-toast" id="achToast" role="status" aria-live="polite" hidden></div>
 
 <script src="js/data.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/render.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/online.js"></script>
+<script src="js/achievements.js"></script>
 <script src="js/ui.js"></script>

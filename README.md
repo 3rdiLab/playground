@@ -16,12 +16,17 @@ It runs from a link, with touch buttons on phones.
 - **Story mode:** seven chapters across the worlds, ending against Null, the Void Emperor. Beating him unlocks Null.
 - **Fighter creator:** design a fighter's look, colors, moves, awakening and stats, then share it to the community gallery.
 - **Leaderboard:** shared wins, best streak and story progress for everyone who opens the game on claude.ai.
+- **Achievements:** 39 awards across combat, technique, story and creator goals, with pop-ups and an Awards tab.
+  Award points show on the leaderboard.
+- **Progression:** your custom fighters earn 1 skill point per 5 wins to upgrade Health, Speed or Power.
+  The rival AI gains a level every time it loses, adding a point to a random stat for every rival you face.
 - **Rival AI banter:** rivals can trash-talk you live with Claude, reacting to how the match went.
   Switch it to classic lines in the header.
 
 Source: [`arena/`](arena/). `index.html` holds the layout and styles. The scripts in `arena/js/` load in this order:
-`data.js` (roster, story, lines), `audio.js`, `render.js` (stages, fighters, effects), `engine.js`
-(combat, AI, camera, input), `online.js` (saves, leaderboard, gallery, banter) and `ui.js` (screens).
+`data.js` (roster, story, lines), `audio.js`, `render.js` (stages, jointed fighter rigs, effects), `engine.js`
+(combat, AI, camera, input, bloom), `online.js` (saves, progression, leaderboard, gallery, banter),
+`achievements.js` and `ui.js` (screens).
 
 ## Terminal version
 

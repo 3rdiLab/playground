@@ -14,6 +14,10 @@
 
   // ---------- custom fighter validation ----------
   const HEX = /^#[0-9a-fA-F]{6}$/;
+  // Progression: custom fighters earn 1 skill point per 5 wins (max 10 per stat);
+  // the rival AI levels up each time it loses, adding a point to a random stat.
+  const UP_CAP = 10, AI_CAP = 15, WINS_PER_POINT = 5;
+  const PER_POINT = { hp: 3, speed: 0.012, power: 0.012 };
   const ENUMS = {
     hair: ['spiky', 'swept', 'messy', 'flame', 'tall', 'long', 'crown'],
     outfit: ['jacket', 'robe', 'vest', 'gi', 'suit', 'uniform', 'haori'],
@@ -51,6 +55,9 @@
       quote: str(raw.quote, 90),
     };
     if (raw.awakenHair && HEX.test(String(raw.awakenHair))) def.awakenHair = String(raw.awakenHair);
+    const up = raw.up || {};
+    def.up = { hp: Math.round(num(up.hp, 0, UP_CAP, 0)), speed: Math.round(num(up.speed, 0, UP_CAP, 0)), power: Math.round(num(up.power, 0, UP_CAP, 0)) };
+    def.wins = Math.round(num(raw.wins, 0, 1e6, 0));
     def.special.color = def.colors.aura;
     def.ult.color = def.colors.awaken;
     return def;
@@ -69,11 +76,19 @@
   const DEFAULT_SAVE = () => ({ story: { hero: 'kaito', cleared: 0 }, custom: [], stats: { wins: 0, losses: 0, streak: 0, best: 0, main: {} }, v: 1 });
   function normalizeSave(s) {
     const d = DEFAULT_SAVE();
-    if (!s || typeof s !== 'object') return d;
+    if (!s || typeof s !== 'object') s = d;
     const story = s.story || {};
     const stats = s.stats || {};
+    const ach = s.ach && typeof s.ach === 'object' ? s.ach : {};
+    const numMap = (o, n) => (o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).slice(0, n).map(([k, v]) => [str(k, 40), Math.round(num(v, 0, 1e13, 0))])) : {});
     return {
       v: 1,
+      ach: {
+        un: numMap(ach.un, 80), c: numMap(ach.c, 80),
+        s: { worldsWon: Array.isArray(ach.s && ach.s.worldsWon) ? ach.s.worldsWon.map(x => str(x, 20)).slice(0, 12) : [],
+             fightersWon: Array.isArray(ach.s && ach.s.fightersWon) ? ach.s.fightersWon.map(x => str(x, 40)).slice(0, 40) : [] },
+      },
+      ai: (() => { const a = s.ai || {}, p = a.pts || {}; return { level: Math.round(num(a.level, 0, 1e6, 0)), pts: { hp: Math.round(num(p.hp, 0, 1e6, 0)), speed: Math.round(num(p.speed, 0, 1e6, 0)), power: Math.round(num(p.power, 0, 1e6, 0)) } }; })(),
       story: { hero: str(story.hero, 40) || 'kaito', cleared: Math.round(num(story.cleared, 0, 7, 0)) },
       custom: Array.isArray(s.custom) ? s.custom.slice(0, 12).map(f => { const c = sanitizeFighter(f); if (c && f.shared) c.shared = true; return c; }).filter(Boolean) : [],
       stats: {
@@ -113,6 +128,11 @@
           const merged = remote;
           merged.story.cleared = Math.max(remote.story.cleared, localSave.story.cleared);
           for (const k of ['wins', 'losses', 'best']) merged.stats[k] = Math.max(remote.stats[k], localSave.stats[k]);
+          if (localSave.ai.level > merged.ai.level) merged.ai = localSave.ai;
+          for (const f of merged.custom) { const l = localSave.custom.find(x => x.id === f.id); if (l && l.wins > f.wins) { f.wins = l.wins; f.up = l.up; } }
+          for (const [k, v] of Object.entries(localSave.ach.un)) if (!merged.ach.un[k]) merged.ach.un[k] = v;
+          for (const [k, v] of Object.entries(localSave.ach.c)) merged.ach.c[k] = Math.max(merged.ach.c[k] || 0, v);
+          for (const k of ['worldsWon', 'fightersWon']) merged.ach.s[k] = [...new Set([...merged.ach.s[k], ...localSave.ach.s[k]])];
           const ids = new Set(merged.custom.map(f => f.id));
           for (const f of localSave.custom) if (!ids.has(f.id) && merged.custom.length < 12) merged.custom.push(f);
           online.save = merged;
@@ -125,12 +145,48 @@
     return online;
   });
 
+  // ---------- progression ----------
+  const KEYS = ['hp', 'speed', 'power'];
+  online.PER_POINT = PER_POINT; online.UP_CAP = UP_CAP; online.AI_CAP = AI_CAP; online.WINS_PER_POINT = WINS_PER_POINT;
+  function boosted(def, pts) {
+    const d = { ...def };
+    d.hp = Math.round(def.hp + (pts.hp || 0) * PER_POINT.hp);
+    d.speed = +(def.speed + (pts.speed || 0) * PER_POINT.speed).toFixed(3);
+    d.power = +((def.power || 1) + (pts.power || 0) * PER_POINT.power).toFixed(3);
+    return d;
+  }
+  online.skillPoints = d => (d && d.custom ? Math.max(0, Math.floor((d.wins || 0) / WINS_PER_POINT) - KEYS.reduce((t, k) => t + (d.up ? d.up[k] : 0), 0)) : 0);
+  /** Stats a fighter actually fights with: base + upgrades (custom) or + AI levels (rival). */
+  online.effective = (def, asRival) => {
+    let d = def.custom && def.up ? boosted(def, def.up) : { ...def };
+    if (asRival) { const p = online.aiBonus(); if (p.hp || p.speed || p.power) d = boosted(d, p); }
+    return d;
+  };
+  online.aiBonus = () => { const p = online.save.ai.pts; return { hp: Math.min(AI_CAP, p.hp), speed: Math.min(AI_CAP, p.speed), power: Math.min(AI_CAP, p.power) }; };
+  online.aiLevelUp = () => {
+    const ai = online.save.ai;
+    ai.level++;
+    const open = KEYS.filter(k => ai.pts[k] < AI_CAP);
+    const k = open.length ? open[Math.floor(Math.random() * open.length)] : null;
+    if (k) ai.pts[k]++;
+    return k;
+  };
+  online.upgrade = (id, key) => {
+    const d = online.save.custom.find(f => f.id === id);
+    if (!d || !KEYS.includes(key) || online.skillPoints(d) < 1 || d.up[key] >= UP_CAP) return false;
+    d.up[key]++;
+    online.persist();
+    if (d.shared) online.publishGallery();
+    return true;
+  };
+  online.recordCustomWin = id => { const d = online.save.custom.find(f => f.id === id); if (!d) return 0; const before = online.skillPoints(d); d.wins++; return online.skillPoints(d) - before; };
+
   // ---------- leaderboard ----------
   online.submitScore = async () => {
     if (!online.db || !online.uid) return;
     const s = online.save.stats;
     const main = Object.entries(s.main).sort((a, b) => b[1] - a[1])[0];
-    const body = { wins: s.wins, losses: s.losses, best: s.best, story: online.save.story.cleared, main: main ? main[0] : '', updated: Date.now() };
+    const body = { wins: s.wins, losses: s.losses, best: s.best, story: online.save.story.cleared, main: main ? main[0] : '', ap: SL.ach ? SL.ach.points() : 0, ai: online.save.ai.level, awards: SL.ach ? SL.ach.count() : 0, updated: Date.now() };
     try { await online.db.doc(`scores/${online.uid}`).set(body); } catch (e) { /* view-only viewers cannot write */ }
   };
   online.watchScores = cb => {

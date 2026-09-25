@@ -20,6 +20,7 @@
     emperor: { label: 'Emperor', react: 6,  block: 0.72, aggro: 0.85 },
   };
 
+  SL.settings = { hq: true };
   const game = (SL.game = {
     phase: 'idle', paused: false, frame: 0, phaseT: 0,
     fighters: [], projectiles: [], hazards: [], particles: [], texts: [], bubbles: [],
@@ -104,6 +105,8 @@
       sfx(heavy ? 'heavy' : 'hit');
     }
 
+    emitEvent('hit', { att, def, dmg: d, blocked, adv, crit, ult: !!opts.ult });
+
     if (def.hp <= 0) {
       def.state = 'ko'; def.t = 0; def.vy = -8; def.vx = dir * 7; def.stun = 0;
       game.phase = 'roundEnd'; game.phaseT = 0;
@@ -112,7 +115,8 @@
       emit(def.x, def.y - 60, 40, { spread: 14, life: 30, r: 4, color: '#ffd27a' });
       banner('K.O.!', '#ff4a3a', 110);
       sfx('ko');
-      emitEvent('ko', { winner: att, loser: def });
+      emitEvent('ko', { winner: att, loser: def, ult: !!opts.ult });
+      emitEvent('round', { winner: game.fighters.indexOf(att), timeout: false });
     } else if (!def.awakened && def.hp <= def.maxHp * 0.3 && !game.pendingAwaken.includes(def)) {
       game.pendingAwaken.push(def);
     }
@@ -143,7 +147,7 @@
   function shoot(f, o) {
     game.projectiles.push({
       owner: f, x: f.x + f.facing * o.dx, y: f.y - o.dy, vx: f.facing * o.speed, r: o.r,
-      dmg: o.dmg, kb: o.kb, lift: o.lift, kind: o.kind, big: !!o.big, color: o.color, pull: !!o.pull, t: 0, dead: false,
+      dmg: o.dmg, kb: o.kb, lift: o.lift, kind: o.kind, big: !!o.big, ult: !!o.big, color: o.color, pull: !!o.pull, t: 0, dead: false,
     });
   }
 
@@ -269,7 +273,7 @@
       if (inp.ult && f.energy >= 100) startUlt(f);
       else if (inp.special && f.energy >= 25 && onGround) startSpecial(f);
       else if (inp.attack) startAttack(f, 0);
-      else if (inp.dash && onGround) { f.state = 'dash'; f.t = 0; f.dashDir = inp.dash; f.invuln = Math.max(f.invuln, 6); sfx('dash'); }
+      else if (inp.dash && onGround) { f.state = 'dash'; f.t = 0; f.dashDir = inp.dash; f.invuln = Math.max(f.invuln, 6); sfx('dash'); emitEvent('dash', f); }
       else if (onGround && inp.block) { f.state = 'block'; f.vx = 0; }
       else if (onGround && inp.charge) {
         f.state = 'charge'; f.vx = 0;
@@ -336,14 +340,14 @@
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         emit(mx, my, 30, { spread: 12, life: 24, r: 4, color: '#fff2b8', kind: 'spark' });
         emit(mx, my, 1, { life: 18, r: 20, grow: 120, color: 'rgba(255,255,255,1)', kind: 'ring' });
-        floatText(mx, my - 50, 'CLASH!', '#ffffff', 30);
+        floatText(mx, my - 50, 'CLASH!', '#ffffff', 30); emitEvent('clash', { a: a.owner, b: b.owner });
         game.shake = Math.max(game.shake, 10); sfx('boom');
       }
     }
     for (const p of P) {
       if (p.dead) continue;
       const tgt = other(p.owner);
-      if (tgt.state !== 'ko' && circleHitsFighter(p, tgt) && hit(p.owner, tgt, p.dmg, p.kb, p.lift)) {
+      if (tgt.state !== 'ko' && circleHitsFighter(p, tgt) && hit(p.owner, tgt, p.dmg, p.kb, p.lift, { ult: p.ult })) {
         p.dead = true;
         emit(p.x, p.y, p.big ? 40 : 12, { spread: p.big ? 14 : 8, life: 24, r: 5, color: p.color });
       }
@@ -363,14 +367,14 @@
           if (h.kind === 'fist') emit(h.x, GROUND - 10, 1, { life: 24, r: 30, grow: 260, color: '#ffffff', kind: 'ring' });
         }
         if (active) {
-          if (!h.hit && Math.abs(tg.x - h.x) < h.w / 2 + 22 && (h.kind === 'pillar' || tg.y > GROUND - 220) && hit(h.owner, tg, h.dmg, h.kb, h.lift)) h.hit = true;
+          if (!h.hit && Math.abs(tg.x - h.x) < h.w / 2 + 22 && (h.kind === 'pillar' || tg.y > GROUND - 220) && hit(h.owner, tg, h.dmg, h.kb, h.lift, { ult: true })) h.hit = true;
           if (h.kind === 'pillar') emit(h.x, GROUND, 3, { jitter: h.w * 0.6, jitterY: 4, vy: -8, life: 22, r: 7, color: h.color, drag: 0.97 });
         }
       } else if (h.kind === 'beam') {
         if (active && (h.t - h.warn) % 5 === 0 && h.n < 8) {
           h.n++;
           const o = h.owner, inPath = (tg.x - o.x) * h.dir > 0 && Math.abs((tg.y - 60) - (o.y - 84)) < 70;
-          if (inPath) hit(o, tg, 4, 4 * h.dir * Math.sign(tg.x - o.x || 1), h.n === 8 ? -8 : 0, { multi: true });
+          if (inPath) hit(o, tg, 4, 4 * h.dir * Math.sign(tg.x - o.x || 1), h.n === 8 ? -8 : 0, { multi: true, ult: true });
           game.shake = Math.max(game.shake, 6);
         }
       } else if (h.kind === 'slashes') {
@@ -379,14 +383,14 @@
           if ((h.t - h.warn) % every === 0 && h.n < h.hits) {
             h.n++;
             const last = h.n === h.hits;
-            hit(h.owner, tg, h.dmg, last ? 12 : 2, last ? -10 : 0, { multi: !last || h.hits > 1, unblockable: h.hits === 1 });
+            hit(h.owner, tg, h.dmg, last ? 12 : 2, last ? -10 : 0, { multi: !last || h.hits > 1, unblockable: h.hits === 1, ult: true });
             emit(tg.x, tg.y - 60, 10, { spread: 10, life: 16, r: 3, color: h.color, kind: 'spark' });
             sfx('swing');
           }
         }
       } else if (h.kind === 'domain') {
         if (h.t < h.warn && tg.state !== 'ko') { tg.vx = 0; tg.state = 'hurt'; tg.stun = 10; if (tg.y < GROUND) tg.vy = Math.min(tg.vy, 0.5); }
-        if (h.t === h.warn && !h.hit) { h.hit = true; hit(h.owner, tg, 30, 12, -10, { unblockable: true }); game.shake = 20; sfx('boom'); }
+        if (h.t === h.warn && !h.hit) { h.hit = true; hit(h.owner, tg, 30, 12, -10, { unblockable: true, ult: true }); game.shake = 20; sfx('boom'); }
       }
       if (h.t > h.warn + h.act + 20) h.dead = true;
     }
@@ -561,6 +565,7 @@
     game.phase = 'roundEnd'; game.phaseT = 0;
     if (Math.abs(rp - rc) < 0.001) banner('Draw', '#c7cbe0', 110);
     else { game.wins[rp > rc ? 0 : 1]++; banner('Time!', '#ffc23d', 110); }
+    emitEvent('round', { winner: Math.abs(rp - rc) < 0.001 ? -1 : rp > rc ? 0 : 1, timeout: true });
   }
   function advanceRound() {
     const [a, b] = game.wins;
@@ -597,6 +602,33 @@
     canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
     scale = canvas.width / W;
   }
+  // Post-processing: a cheap bloom (downscaled, contrast-thresholded, blurred copy
+  // added back on top) and a vignette. Bloom needs canvas filters; without them it is skipped.
+  let bloom = null, vignette = null;
+  function postFX() {
+    if (!SL.settings.hq) return;
+    if (!bloom) {
+      const cv = document.createElement('canvas'); cv.width = 240; cv.height = 135;
+      const bc = cv.getContext('2d'); bc.filter = 'brightness(0.95) contrast(3.2) saturate(1.3) blur(2.5px)';
+      bloom = { cv, bc, ok: typeof bc.filter === 'string' && bc.filter !== 'none' };
+    }
+    if (bloom.ok) {
+      bloom.bc.clearRect(0, 0, 240, 135);
+      bloom.bc.drawImage(canvas, 0, 0, 240, 135);
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.2; ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(bloom.cv, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+    if (!vignette) {
+      vignette = document.createElement('canvas'); vignette.width = W; vignette.height = H;
+      const vc = vignette.getContext('2d'), gr = vc.createRadialGradient(W / 2, H * 0.55, H * 0.35, W / 2, H * 0.55, W * 0.72);
+      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.42)');
+      vc.fillStyle = gr; vc.fillRect(0, 0, W, H);
+    }
+    ctx.drawImage(vignette, 0, 0);
+  }
+
   function render() {
     R.ctx = ctx;
     const T = game.frame, cam = game.cam;
@@ -616,6 +648,7 @@
     R.drawTexts(game.texts);
     ctx.restore();
     ctx.restore();
+    postFX();
     R.drawHUD(game, T);
     if (game.cine) R.drawCine(game, T, () => {
       ctx.save(); ctx.translate(W / 2, GROUND); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -GROUND);

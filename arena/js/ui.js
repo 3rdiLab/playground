@@ -56,13 +56,14 @@
   // ---------- views ----------
   function showView(name) {
     ui.view = name;
-    for (const v of ['versus', 'story', 'create', 'ranks', 'arena']) $('view-' + v).hidden = v !== name;
+    for (const v of ['versus', 'story', 'create', 'awards', 'ranks', 'arena']) $('view-' + v).hidden = v !== name;
     document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === name)));
     $('app').classList.toggle('in-arena', name === 'arena');
     if (name === 'versus') renderVersus();
     if (name === 'story') renderStory();
     if (name === 'create') renderCreator();
     if (name === 'ranks') renderRanks();
+    if (name === 'awards') renderAwards();
     if (name !== 'arena') { E.stop(); crLoop(name === 'create'); }
   }
   document.querySelectorAll('.tabs [role=tab]').forEach(b => b.addEventListener('click', () => {
@@ -71,13 +72,90 @@
   }));
   function confirmLeave() { return true; }
 
+  // ================= AWARDS =================
+  const ICONS = {
+    fist: 'M7 10V6a2 2 0 0 1 4 0v3m0-1V5a2 2 0 0 1 4 0v4m0-2a2 2 0 0 1 4 0v5a7 7 0 0 1-7 7h-1a6 6 0 0 1-6-6v-3a2 2 0 0 1 4 0',
+    crown: 'M3 8l4 4 5-7 5 7 4-4-2 11H5z',
+    flame: 'M12 3c1 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-5 3-7 0 3 1 4 3 5 0-4-1-6 0-9z',
+    bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
+    shield: 'M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z',
+    heart: 'M12 20s-8-5-8-11a4 4 0 0 1 8-1 4 4 0 0 1 8 1c0 6-8 11-8 11z',
+    star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z',
+    eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+    wheel: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 3v12M6.8 9l10.4 6M6.8 15l10.4-6',
+    clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4v5l4 2',
+    mirror: 'M8 3h8v18H8zM12 3v18',
+    book: 'M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z',
+    globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',
+    void: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8z',
+    brush: 'M18 3l3 3-9 9-3-3zM8 13l3 3c0 3-3 5-7 5 1-2 1-3 1-4a3 3 0 0 1 3-4z',
+    share: 'M18 8a3 3 0 1 0-2.8-4M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm12 6a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 10.5l6.8-4M8.6 13.5l6.8 4',
+    chat: 'M4 5h16v10H9l-5 4z',
+  };
+  function badge(def, done) {
+    const t = SL.ach.TIERS[def.tier], ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+    const p = document.createElementNS(ns, 'path'); p.setAttribute('d', ICONS[def.icon] || ICONS.star); svg.append(p);
+    const b = el('span', { class: 'badge' + (done ? '' : ' off'), style: `--ta:${t.a};--tb:${t.b}` }); b.append(svg);
+    return b;
+  }
+  let awardFilter = 'all';
+  function renderAwards() {
+    const L = SL.ach.LIST, done = L.filter(a => SL.ach.unlockedAt(a.id));
+    const maxPts = L.reduce((t, a) => t + SL.ach.TIERS[a.tier].pts, 0);
+    $('awardsSummary').innerHTML = '';
+    $('awardsSummary').append(
+      el('div', { class: 'aw-big' }, el('b', { text: `${done.length}/${L.length}` }), el('span', { text: 'Unlocked' })),
+      el('div', { class: 'aw-big' }, el('b', { text: String(SL.ach.points()) }), el('span', { text: `of ${maxPts} points` })),
+      el('div', { class: 'aw-bar' }, el('i', { style: `width:${Math.round(100 * done.length / L.length)}%` })));
+    const seg = $('awardsFilter'); seg.innerHTML = '';
+    for (const [k, label] of [['all', 'All'], ['done', 'Unlocked'], ['todo', 'Locked']]) seg.append(el('button', { type: 'button', 'aria-pressed': String(awardFilter === k), text: label, onclick: () => { awardFilter = k; renderAwards(); } }));
+    const box = $('awardsList'); box.innerHTML = '';
+    const cats = [...new Set(L.map(a => a.cat))];
+    for (const cat of cats) {
+      const items = L.filter(a => a.cat === cat).filter(a => { const u = !!SL.ach.unlockedAt(a.id); return awardFilter === 'all' || (awardFilter === 'done' ? u : !u); });
+      if (!items.length) continue;
+      const grid = el('div', { class: 'aw-grid' });
+      for (const a of items) {
+        const pr = SL.ach.progress(a), at = SL.ach.unlockedAt(a.id), hidden = a.secret && !at;
+        const pct = Math.round(100 * pr.value / (pr.goal || 1));
+        grid.append(el('div', { class: 'aw' + (at ? ' done' : '') },
+          badge(a, !!at),
+          el('div', { class: 'aw-body' },
+            el('p', { class: 'aw-name', text: hidden ? 'Secret achievement' : a.name }),
+            el('p', { class: 'aw-desc', text: hidden ? 'Keep playing to discover it.' : a.desc }),
+            el('p', { class: 'aw-meta' }, el('span', { class: 'pill', style: `color:${SL.ach.TIERS[a.tier].a}`, text: `${SL.ach.TIERS[a.tier].label} · ${SL.ach.TIERS[a.tier].pts}` }),
+              el('span', { text: at ? `Unlocked ${new Date(at).toLocaleDateString()}` : pr.goal > 1 ? `${pr.value}/${pr.goal}` : 'Locked' })),
+            !at && pr.goal > 1 ? el('span', { class: 'aw-prog' }, el('i', { style: `width:${pct}%` })) : null)));
+      }
+      box.append(el('h3', { class: 'aw-cat', text: cat }), grid);
+    }
+  }
+  // unlock pop-up, shown anywhere in the app
+  const achQueue = [];
+  let achShowing = false;
+  function nextAch() {
+    if (achShowing || !achQueue.length) return;
+    achShowing = true;
+    const def = achQueue.shift(), t = $('achToast');
+    t.innerHTML = '';
+    t.append(badge(def, true), el('div', {}, el('p', { class: 'eyebrow', text: `Achievement unlocked · +${SL.ach.TIERS[def.tier].pts}` }), el('p', { class: 'at-name', text: def.name })));
+    t.hidden = false; t.classList.remove('show'); void t.offsetWidth; t.classList.add('show');
+    A.play('achieve');
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => { t.hidden = true; achShowing = false; nextAch(); }, 350); }, 3000);
+  }
+  SL.ach.onUnlock(def => { achQueue.push(def); nextAch(); if (ui.view === 'awards') renderAwards(); });
+
   // ---------- header toggles ----------
   function refreshToggles() {
     $('btnSound').textContent = A.muted ? 'Sound: Off' : 'Sound: On';
+    $('btnGfx').textContent = SL.settings.hq ? 'Graphics: High' : 'Graphics: Low';
     const live = O.banterMode === 'live';
     $('btnBanter').textContent = live ? 'Rival AI: Live' : 'Rival AI: Classic';
     $('btnBanter').title = live ? 'Rivals write fresh trash talk with Claude (uses your Claude usage). Click for classic lines.' : 'Rivals use built-in lines. Click to let Claude write live trash talk.';
   }
+  SL.settings.hq = O.local.get('hq', true);
+  $('btnGfx').addEventListener('click', () => { SL.settings.hq = !SL.settings.hq; O.local.set('hq', SL.settings.hq); refreshToggles(); });
   $('btnSound').addEventListener('click', () => { A.muted = !A.muted; O.local.set('muted', A.muted); A.init(); refreshToggles(); });
   $('btnBanter').addEventListener('click', () => { O.setBanter(O.banterMode === 'live' ? 'classic' : 'live'); refreshToggles(); toast(O.banterMode === 'live' ? 'Rivals will write live trash talk when available.' : 'Rivals will use classic lines.'); });
 
@@ -140,12 +218,14 @@
     return el('div', { class: 'stat' }, el('span', { text: label }), el('span', { class: 'bar' }, el('i', { style: `width:${Math.max(6, Math.min(100, pct))}%` })), el('span', { text: shown }));
   }
   function renderDetail() {
-    const d = findDef(ui.focus) || findDef(ui.p1);
+    const base = findDef(ui.focus) || findDef(ui.p1);
     const box = $('detail'); box.innerHTML = '';
-    if (!d) return;
+    if (!base) return;
+    const d = O.effective(base);
     const beats = ENERGY_ORDER.filter(e => D.overpowers(d.energy, e));
+    const add = (...kids) => box.append(...kids.filter(k => k != null));
     const weak = ENERGY_ORDER.filter(e => D.overpowers(e, d.energy));
-    box.append(
+    add(
       el('div', {}, el('p', { class: 'eyebrow', text: worldName(d) }), el('h3', { text: d.name })),
       el('div', { class: 'matchup' }, energyPill(d), d.gallery ? el('span', { class: 'pill', style: 'color:#9aa2c6', text: 'Community' }) : null),
       d.quote ? el('p', { class: 'quote', text: `“${d.quote}”` }) : null,
@@ -154,9 +234,10 @@
         el('dt', { text: 'Ultimate' }), el('dd', { text: d.ult.name }),
         el('dt', { text: 'Awakens' }), el('dd', { text: d.awaken })),
       el('div', { class: 'stats' },
-        statRow('Health', d.hp, 85, 125, String(d.hp)),
-        statRow('Speed', d.speed, 0.9, 1.16, d.speed.toFixed(2)),
-        statRow('Power', d.power || 1, 0.92, 1.1, (d.power || 1).toFixed(2))),
+        statRow('Health', d.hp, 85, 155, String(d.hp)),
+        statRow('Speed', d.speed, 0.9, 1.3, d.speed.toFixed(2)),
+        statRow('Power', d.power || 1, 0.92, 1.24, (d.power || 1).toFixed(2))),
+      base.custom && base.up && (base.up.hp || base.up.speed || base.up.power) ? el('p', { class: 'note', text: `Includes upgrades: Health +${base.up.hp}, Speed +${base.up.speed}, Power +${base.up.power}.` }) : null,
       d.energy === 'Void' ? el('p', { class: 'note', text: 'Void energy has no weakness and no advantage.' }) :
       el('div', { class: 'matchup' }, el('span', { text: 'Strong vs' }), ...beats.map(e => el('span', { class: 'pill', style: `color:${ENERGY_COLOR[e]}`, text: e })), el('span', { text: '· Weak vs' }), ...weak.map(e => el('span', { class: 'pill', style: `color:${ENERGY_COLOR[e]}`, text: e }))),
     );
@@ -165,7 +246,12 @@
     const box = $('diffSeg'); box.innerHTML = '';
     for (const [k, v] of Object.entries(E.DIFF)) box.append(el('button', { type: 'button', 'aria-pressed': String(ui.diff === k), text: v.label, onclick: () => { ui.diff = k; O.local.set('diff', k); renderDiff(); } }));
   }
+  function renderAiLevel() {
+    const ai = O.save.ai, b = O.aiBonus();
+    $('aiLevel').textContent = ai.level ? `Rival AI level ${ai.level}: Health +${b.hp}, Speed +${b.speed}, Power +${b.power}` : 'Rival AI level 0. It gains a level every time it loses.';
+  }
   function renderVersus() {
+    renderAiLevel();
     if (!findDef(ui.p1)) ui.p1 = 'kaito';
     if (ui.p2 !== 'random' && !findDef(ui.p2)) ui.p2 = 'random';
     renderSlots(); renderFilters(); renderGrid(); renderDetail(); renderDiff();
@@ -213,15 +299,17 @@
 
   function startFight(cfg) {
     A.init(); A.play('confirm');
-    const { p1, p2 } = cfg;
-    fight = { ...cfg, lines: O.classicLines(p2), live: null, token: Math.random() };
+    const p1 = O.effective(cfg.p1), p2 = O.effective(cfg.p2, true);
+    cfg = { ...cfg, base1: cfg.base1 || cfg.p1, base2: cfg.base2 || cfg.p2 };
+    SL.ach.beginMatch();
+    fight = { ...cfg, p1: cfg.base1, p2: cfg.base2, lines: O.classicLines(p2), live: null, token: Math.random() };
     const token = fight.token;
     showView('arena');
     $('arenaStage').textContent = cfg.stageName || stageNameOf(p2);
     // Ask Claude for fresh rival lines while the VS splash plays.
     if (O.canBanter()) {
       const context = cfg.mode === 'story' ? `Story chapter "${cfg.chapterTitle}". ${p2.boss ? 'The rival is the final boss who wants to swallow all six worlds.' : "The rival is under the Void Emperor's mind control and does not want to be freed."}` : 'An exhibition match.';
-      O.matchLines(p1, p2, context).then(l => { if (!fight || fight.token !== token || !l) return; fight.live = l; if (SL.game.phase === 'fight' && SL.game.phaseT < 300 && l.intro) E.say(SL.game.fighters[1], l.intro); });
+      O.matchLines(p1, p2, context).then(l => { if (!fight || fight.token !== token || !l) return; fight.live = l; SL.ach.bump('banterHeard'); if (SL.game.phase === 'fight' && SL.game.phaseT < 300 && l.intro) E.say(SL.game.fighters[1], l.intro); });
     }
     vsSplash(p1, p2, () => {
       if (!fight || fight.token !== token) return;
@@ -238,7 +326,7 @@
     const l = el('canvas'), r = el('canvas');
     overlay.append(el('div', { class: 'vs-splash' },
       el('div', { class: 'side l' }, l, el('span', { class: 'wl', text: `${p1.energy} · ${worldName(p1)}` }), el('span', { class: 'nm', text: p1.name })),
-      el('div', { class: 'side r' }, r, el('span', { class: 'wl', text: `${p2.energy} · ${worldName(p2)}` }), el('span', { class: 'nm', text: p2.name })),
+      el('div', { class: 'side r' }, r, el('span', { class: 'wl', text: `${p2.energy} · ${worldName(p2)}${O.save.ai.level ? ` · Rival AI Lv ${O.save.ai.level}` : ''}` }), el('span', { class: 'nm', text: p2.name })),
       el('div', { class: 'vs', text: 'VS' })));
     paint(l, p1, { size: 320 }); paint(r, p2, { size: 320, facing: -1, corrupted: fight && fight.corrupted });
     overlay.hidden = false;
@@ -257,6 +345,7 @@
     if (fight.live && fight.live.awaken) setTimeout(() => E.say(f, fight.live.awaken, 150), 0);
   });
 
+  const STAT_LABEL = { hp: 'Health', speed: 'Speed', power: 'Power' };
   function recordResult(result) {
     const s = O.save.stats;
     if (result.won) { s.wins++; s.streak++; s.best = Math.max(s.best, s.streak); }
@@ -271,8 +360,22 @@
     const mode = fight.mode, rival = result.rival;
     recordResult(result);
     const storyAdvance = mode === 'story' && result.won && fight.onWin;
+    const notes = [];
+    if (result.won) {
+      const k = O.aiLevelUp();
+      notes.push(`The rival AI learned from this loss: now level ${O.save.ai.level}${k ? ` (+1 ${STAT_LABEL[k]})` : ' (all stats maxed)'}.`);
+      const base = fight.p1;
+      if (base.custom && !base.gallery) {
+        const gained = O.recordCustomWin(base.id);
+        const d = customs().find(f => f.id === base.id);
+        if (gained > 0) notes.push(`${base.short} earned a skill point! Spend it in the Create tab.`);
+        else if (d) notes.push(`${base.short}: ${d.wins % O.WINS_PER_POINT}/${O.WINS_PER_POINT} wins toward the next skill point.`);
+      }
+    }
     O.persist();
+    SL.ach.onMatch(result, { diff: fight.diff, rival: fight.p2, mode });
     O.submitScore();
+    const unlocked = SL.ach.matchUnlocks();
     const title = result.draw ? 'Draw' : result.won ? 'Victory' : 'Defeat';
     const classic = result.won ? fight.lines.lose : fight.lines.win;
     const live = fight.live ? (result.won ? fight.live.lose : fight.live.win) : '';
@@ -294,7 +397,10 @@
       el('p', { class: 'eyebrow', text: `${mode === 'story' ? 'Chapter' : 'Match'} over · ${result.wins[0]}–${result.wins[1]}` }),
       el('h2', { class: 'ov-title ' + (result.won ? 'win' : 'lose'), text: title }),
       el('p', { class: 'ov-sub', text: `Best combo ${s.maxCombo} · Ultimates ${s.ults} · Win streak ${O.save.stats.streak} (best ${O.save.stats.best})` }),
-      quote, actions));
+      quote,
+      notes.length ? el('p', { class: 'ov-note', text: notes.join(' ') }) : null,
+      unlocked.length ? el('p', { class: 'ov-note ach', text: `Achievements unlocked: ${unlocked.map(a => a.name).join(', ')}` }) : null,
+      actions));
     overlay.onclick = null;
     overlay.hidden = false;
     if (O.canBanter()) {
@@ -361,7 +467,7 @@
         mode: 'story', p1: hero, p2: foe, diff: ch.diff, hpMult: ch.hpMult, corrupted: !ch.boss,
         stage: WORLDS[ch.world].stage, stageName: WORLDS[ch.world].stageName, chapterTitle: ch.title,
         onWin: () => {
-          if (O.save.story.cleared === i) { O.save.story.cleared = i + 1; O.persist(); O.submitScore(); }
+          if (O.save.story.cleared === i) { O.save.story.cleared = i + 1; SL.ach.check(); SL.ach.flush(); O.persist(); O.submitScore(); }
           fight = null; E.stop(); overlay.hidden = true;
           showView('story');
           runDialogue(ch, i, hero, foe, ch.outro, () => { renderStory(); if (i === STORY.length - 1) toast('Null, the Void Emperor, is now playable in Versus.'); }, true);
@@ -482,7 +588,7 @@
   function crPreview() {
     const c = $('crCanvas');
     const d = crDef();
-    R.portrait(c, d, { size: 360, awakened: $('crAwake').checked, T: crFrame, zoom: 1.5 });
+    R.portrait(c, d, { size: 360, awakened: $('crAwake').checked, T: crFrame, zoom: 1.22 });
   }
   function crLoop(on) {
     cancelAnimationFrame(crRaf);
@@ -516,6 +622,8 @@
     const d = O.sanitizeFighter({ ...crDef(), id });
     const prev = list.find(f => f.id === id);
     d.shared = share ? true : !!(prev && prev.shared);
+    if (prev) { d.up = prev.up; d.wins = prev.wins; } else SL.ach.bump('customsCreated');
+    if (share) SL.ach.bump('shared');
     if (prev) list[list.indexOf(prev)] = d; else list.push(d);
     crEditing = id;
     portraitCache.clear();
@@ -527,6 +635,27 @@
     $('crSave').textContent = 'Save changes';
     renderSaved();
     return d;
+  }
+  function upgradeBox(d) {
+    const pts = O.skillPoints(d), next = O.WINS_PER_POINT - (d.wins % O.WINS_PER_POINT);
+    const box = el('div', { class: 'upg' },
+      el('p', { class: 'upg-head' }, el('span', { text: `${d.wins} win${d.wins === 1 ? '' : 's'}` }),
+        el('span', { class: pts ? 'upg-pts on' : 'upg-pts', text: pts ? `${pts} skill point${pts === 1 ? '' : 's'} to spend` : `${next} more win${next === 1 ? '' : 's'} to next point` })));
+    const row = el('div', { class: 'upg-row' });
+    for (const k of ['hp', 'speed', 'power']) {
+      const lv = d.up[k], full = lv >= O.UP_CAP;
+      row.append(el('button', {
+        type: 'button', class: 'upg-btn', disabled: (!pts || full) ? '' : null,
+        'aria-label': `Upgrade ${STAT_LABEL[k]}, currently +${lv}`,
+        onclick: () => {
+          if (!O.upgrade(d.id, k)) return;
+          A.play('confirm'); SL.ach.bump('upgrades'); if (d.up[k] >= O.UP_CAP) SL.ach.bump('maxedStat');
+          SL.ach.flush(); portraitCache.clear(); renderSaved(); toast(`${d.short}: ${STAT_LABEL[k]} +1.`);
+        },
+      }, el('b', { text: STAT_LABEL[k] }), el('span', { text: full ? 'MAX' : `+${lv}` })));
+    }
+    box.append(row);
+    return box;
   }
   function renderSaved() {
     const box = $('crSaved'); box.innerHTML = '';
@@ -544,10 +673,11 @@
       box.append(el('div', { class: 'saved' }, c, el('div', {},
         el('div', { class: 'nm', text: d.name }),
         el('div', { class: 'matchup' }, energyPill(d), d.shared ? el('span', { class: 'pill', style: 'color:#3ddc97', text: 'Shared' }) : null),
+        upgradeBox(d),
         el('div', { class: 'acts' },
           el('button', { class: 'btn', type: 'button', text: 'Fight', onclick: () => { ui.p1 = d.id; ui.focus = d.id; showView('versus'); } }),
           el('button', { class: 'btn', type: 'button', text: 'Edit', onclick: () => { crEditing = d.id; cr = { ...JSON.parse(JSON.stringify(d)), pts: ptsFrom(d), awakenHair: d.awakenHair || '' }; crWrite(); $('view-create').scrollIntoView({ block: 'start' }); } }),
-          el('button', { class: 'btn', type: 'button', text: d.shared ? 'Unshare' : 'Share', onclick: () => { d.shared = !d.shared; O.persist(); O.publishGallery().then(ok => toast(ok ? (d.shared ? `${d.name} is in the gallery.` : `${d.name} removed from the gallery.`) : 'Sharing needs the claude.ai version with edit access.')); renderSaved(); } }),
+          el('button', { class: 'btn', type: 'button', text: d.shared ? 'Unshare' : 'Share', onclick: () => { d.shared = !d.shared; if (d.shared) SL.ach.bump('shared'); O.persist(); O.publishGallery().then(ok => toast(ok ? (d.shared ? `${d.name} is in the gallery.` : `${d.name} removed from the gallery.`) : 'Sharing needs the claude.ai version with edit access.')); renderSaved(); } }),
           del))));
       paint(c, d, { size: 128 });
     }
@@ -564,7 +694,7 @@
     const s = O.save.stats, box = $('myStats'); box.innerHTML = '';
     const mainId = Object.entries(s.main).sort((a, b) => b[1] - a[1])[0];
     const main = mainId ? findDef(mainId[0]) : null;
-    for (const [label, v] of [['Wins', s.wins], ['Losses', s.losses], ['Best streak', s.best], ['Story', `${O.save.story.cleared}/${STORY.length}`], ['Current streak', s.streak], ['Main', main ? main.short : '—']]) {
+    for (const [label, v] of [['Wins', s.wins], ['Losses', s.losses], ['Best streak', s.best], ['Story', `${O.save.story.cleared}/${STORY.length}`], ['Achievement points', SL.ach.points()], ['Rival AI level', O.save.ai.level]]) {
       box.append(el('div', {}, el('b', { text: String(v) }), el('span', { text: label })));
     }
   }
@@ -585,7 +715,7 @@
         el('td', { class: 'rank', text: String(i + 1) }), el('td', {}, who),
         el('td', { class: 'num', text: String(Number(r.wins) || 0) }), el('td', { class: 'num', text: String(Number(r.best) || 0) }),
         el('td', { class: 'num', text: `${Math.min(STORY.length, Number(r.story) || 0)}/${STORY.length}` }),
-        el('td', { text: main ? main.short : '—' })));
+        el('td', { text: main ? main.short : '—' }), el('td', { class: 'num', text: String(Number(r.ap) || 0) })));
     });
   }
   function renderGallery() {

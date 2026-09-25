@@ -53,6 +53,7 @@
     boom: () => { noise(0.6, 0.55, 500, 'lowpass', 80); tone(60, 0.6, 'sine', 0.55, 25); },
     ko: () => { tone(90, 1.0, 'sine', 0.55, 30); noise(0.8, 0.45, 900, 'lowpass', 100); },
     select: () => tone(660, 0.07, 'triangle', 0.12),
+    achieve: () => { tone(660, 0.12, 'triangle', 0.14); tone(880, 0.12, 'triangle', 0.14, null, 0.1); tone(1320, 0.3, 'triangle', 0.12, null, 0.2); },
     confirm: () => { tone(520, 0.08, 'triangle', 0.12); tone(780, 0.12, 'triangle', 0.12, null, 0.07); },
     drum: () => { tone(95, 0.22, 'sine', 0.22, 50); noise(0.06, 0.08, 300, 'lowpass'); },
     rim: () => noise(0.04, 0.06, 3500, 'highpass'),
